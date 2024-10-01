@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mosquito Density Prediction</title>
+    <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css">
+</head>
+<body>
+    <div class="container">
+        <h1 class="mt-5">Mosquito Density Prediction</h1>
+
+        <!-- Flash messages for success, warning, or danger alerts -->
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                <div class="mt-4">
+                    {% for category, message in messages %}
+                        <div class="alert alert-{{ category }}">{{ message }}</div>
+                    {% endfor %}
+                </div>
+            {% endif %}
+        {% endwith %}
+
+        <!-- Form for selecting a date to get prediction -->
+        <form method="get" action="/">
+            <div class="form-group">
+                <label for="selected_date">Select Date:</label>
+                <select class="form-control" id="selected_date" name="selected_date">
+                    <option value="{{ today }}" {% if selected_date == today %}selected{% endif %}>Today ({{ today }})</option>
+                    <option value="{{ tomorrow }}" {% if selected_date == tomorrow %}selected{% endif %}>Tomorrow ({{ tomorrow }})</option>
+                    <optgroup label="Past Dates">
+                        {% for date in past_dates %}
+                            <option value="{{ date }}" {% if selected_date == date %}selected{% endif %}>{{ date }}</option>
+                        {% endfor %}
+                    </optgroup>
+                    <optgroup label="Future Dates">
+                        {% for date in future_dates %}
+                            <option value="{{ date }}" {% if selected_date == date %}selected{% endif %}>{{ date }}</option>
+                        {% endfor %}
+                    </optgroup>
+                </select>
+            </div>
+            <button type="submit" class="btn btn-primary">Get Prediction</button>
+        </form>
+
+        <hr>
+
+        <!-- Display predictions and metrics if available -->
+        {% if predictions %}
+            <h3>Prediction for {{ selected_date }}</h3>
+            <p><strong>Predicted Mosquito Density:</strong> {{ predictions }}</p>
+
+            <h3>Model Performance Metrics</h3>
+            <ul>
+                <li><strong>Mean Absolute Error (MAE):</strong> {{ metrics.MAE }}</li>
+                <li><strong>Root Mean Squared Error (RMSE):</strong> {{ metrics.RMSE }}</li>
+                <li><strong>Mean Error (Percentage):</strong> {{ metrics['Mean Error'] }}%</li>
+                <li><strong>Standard Deviation (Percentage):</strong> {{ metrics['STD (Percentage)'] }}%</li>
+            </ul>
+
+            <hr>
+
+            <h3>Mosquito Density Prediction Plot</h3>
+            <img src="{{ url_for('plot_png') }}" alt="Mosquito Density Plot" class="img-fluid">
+
+        {% else %}
+            <p>No prediction data available for the selected date.</p>
+        {% endif %}
+    </div>
+
+    <!-- Bootstrap JS and dependencies -->
+    <script src="https://code.jquery.com/jquery-3.5.1.slim.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@popperjs/core@2.9.2/dist/umd/popper.min.js"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.5.2/js/bootstrap.min.js"></script>
+</body>
+</html>
+
+
+
+
+
