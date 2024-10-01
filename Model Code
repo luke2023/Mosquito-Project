@@ -1,100 +1,118 @@
-import numpy as np
 import pandas as pd
-from sklearn.model_selection import train_test_split
-from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
-import tensorflow as tf
+import numpy as np
+from sklearn.preprocessing import MinMaxScaler
 from tensorflow.keras.models import Sequential
 from tensorflow.keras.layers import LSTM, Dense
-import statsmodels.api as sm
-from statsmodels.tsa.tsatools import lagmat
+from tensorflow.keras.callbacks import EarlyStopping
+from tensorflow.keras.optimizers import Adam
+from sklearn.metrics import mean_absolute_error
 import matplotlib.pyplot as plt
 
-# Load the data
-file_path = 'Data.xlsx'
-df = pd.read_excel(file_path)
+# Step 1: Load the data (update the file path to your actual file)
+file_path = 'Data.xlsx'  # Update with your file path
+data = pd.read_excel(file_path)
 
-# Assuming 'precip' is the target variable and others are features
-features = df[['humidity', 'temp', 'solarradiation', 'cloudcover']]
-target = df['precip']
+# Step 2: Preprocess the data
+# Normalize the features (weather data) using MinMaxScaler
+scaler = MinMaxScaler(feature_range=(0, 1))
+scaled_data = scaler.fit_transform(data[['temp', 'precip', 'solarradiation', 'humidity', 'windspeed']])
 
-# Split the data into training and testing sets
-X_train, X_test, y_train, y_test = train_test_split(features, target, test_size=0.2, random_state=42)
+# Prepare input features (X) and output target (y) for LSTM
+X_train = []
+y_train = []
 
-# Reshape data for LSTM [samples, timesteps, features]
-X_train_lstm = np.expand_dims(X_train, axis=1)
-X_test_lstm = np.expand_dims(X_test, axis=1)
+# Define time_steps for the LSTM model (experiment with larger time steps)
+time_steps = 2  # Increasing time_steps to give the model more historical context
+provided=26
+prediction=7
+all=provided+prediction
+# Create sequences of weather data and mosquito density for training (9/5 to 9/30)
+for i in range(time_steps, len(scaled_data[:provided])):  # We stop at index 26 (which corresponds to 9/30)
+    X_train.append(scaled_data[i-time_steps:i])
+    y_train.append(data['mosquito_density'].iloc[i])
 
-# Define the LSTM model
-model_lstm = Sequential()
-model_lstm.add(LSTM(100, activation='relu', input_shape=(X_train_lstm.shape[1], X_train_lstm.shape[2])))
-model_lstm.add(Dense(1))
-model_lstm.compile(optimizer='adam', loss='mse')
+X_train, y_train = np.array(X_train), np.array(y_train)
 
-# Train the LSTM model
-model_lstm.fit(X_train_lstm, y_train, epochs=100, batch_size=32, validation_data=(X_test_lstm, y_test), verbose=1)
+# Step 3: Define the optimized LSTM model (without dropout)
+model = Sequential()
 
-# Extract features from LSTM model
-train_features_lstm = model_lstm.predict(X_train_lstm)
-test_features_lstm = model_lstm.predict(X_test_lstm)
+# First LSTM layer
+model.add(LSTM(units=100, return_sequences=True, input_shape=(X_train.shape[1], X_train.shape[2])))
 
-# Reshape the features for PDL model
-train_features_lstm = train_features_lstm.reshape(-1, 1)
-test_features_lstm = test_features_lstm.reshape(-1, 1)
+# Second LSTM layer
+model.add(LSTM(units=50, return_sequences=False))
 
-# Combine LSTM features with original features for PDL model
-X_train_pdl = np.concatenate((X_train, train_features_lstm), axis=1)
-X_test_pdl = np.concatenate((X_test, test_features_lstm), axis=1)
+# Dense layer with more units for greater capacity
+model.add(Dense(units=50, activation='relu'))
 
-# Adding a constant to the model for intercept
-X_train_pdl = sm.add_constant(X_train_pdl)
-X_test_pdl = sm.add_constant(X_test_pdl)
+# Output layer for mosquito density prediction
+model.add(Dense(units=1))
 
-# Create lagged features for the PDL model
-max_lag = 1
-lagged_train_features = lagmat(X_train_pdl, max_lag, trim='both')
-lagged_test_features = lagmat(X_test_pdl, max_lag, trim='both')
+# Step 4: Compile the model with a custom learning rate for the Adam optimizer
+optimizer = Adam(learning_rate=0.001)
+model.compile(optimizer=optimizer, loss='mean_squared_error')
 
-# Fit the PDL model using statsmodels
-model_pdl = sm.OLS(y_train[max_lag:], lagged_train_features).fit()
+# Step 5: Train the LSTM model with Early Stopping
+early_stopping = EarlyStopping(monitor='loss', patience=100, restore_best_weights=True)
 
-# Predict using the PDL model
-y_pred_pdl = model_pdl.predict(lagged_test_features)
+# Train the model
+model.fit(X_train, y_train, epochs=200, batch_size=16, callbacks=[early_stopping], verbose=1)
 
-# Evaluate the PDL model
-mae_pdl = mean_absolute_error(y_test[max_lag:], y_pred_pdl)
-rmse_pdl = np.sqrt(mean_squared_error(y_test[max_lag:], y_pred_pdl))
-r2_pdl = r2_score(y_test[max_lag:], y_pred_pdl)
+# Step 6: Make predictions for the training period (9/6 to 9/30)
+train_predictions = model.predict(X_train).flatten()
 
-print(f'PDL Model - Mean Absolute Error: {mae_pdl}')
-print(f'PDL Model - Root Mean Squared Error: {rmse_pdl}')
-print(f'PDL Model - R-squared: {r2_pdl}')
+# Step 7: Prepare data for future predictions (10/1 to 10/7)
+X_future = []
 
-# Plot the actual vs predicted values for PDL model
-plt.figure(figsize=(10, 6))
-plt.plot(y_test[max_lag:].values, label='Actual', marker='o')
-plt.plot(y_pred_pdl, label='Predicted', marker='x')
-plt.title('Actual vs Predicted Values (PDL Model)')
-plt.xlabel('Samples')
-plt.ylabel('Precipitation')
+# Prepare sequences for future prediction (10/1 to 10/7)
+for i in range(time_steps, len(scaled_data[provided:all]) + time_steps):
+    X_future.append(scaled_data[provided+i-2*time_steps:provided+i-time_steps])
+
+X_future = np.array(X_future)
+
+# Predict mosquito density for the future period (10/1 to 10/7)
+future_predictions = model.predict(X_future).flatten()
+
+# Step 8: Combine actual and predicted values
+# Exclude the first day from the actual mosquito density data for comparison (from 9/6 onwards)
+y_train_adjusted = data['mosquito_density'][time_steps:provided].values  # Adjusted for time_steps
+train_predictions_adjusted = train_predictions  # Predictions start from 9/6
+
+# Combine training and future predictions
+full_predictions = np.concatenate([train_predictions_adjusted, future_predictions])
+
+# Step 9: Create a date range from 9/6 to 10/7 (since we exclude the first day)
+date_range = pd.date_range(start='2024-09-06', periods=all-time_steps, freq='D')
+
+# Step 10: Calculate MAE and MRAE for the training period (9/6 to 9/30)
+mae = mean_absolute_error(y_train_adjusted, train_predictions_adjusted)
+mrae = np.mean(np.abs(y_train_adjusted - train_predictions_adjusted) / np.abs(y_train_adjusted))
+
+print(f"Mean Absolute Error (MAE) for 9/6 to 9/30: {mae:.4f}")
+print(f"Mean Relative Absolute Error (MRAE) for 9/6 to 9/30: {mrae:.4f}")
+
+# Step 11: Plot the mosquito density predictions
+plt.figure(figsize=(12,6))
+
+# Plot actual mosquito density (9/6 to 9/30)
+plt.plot(date_range[:provided-time_steps], y_train_adjusted, label='Actual Mosquito Density (9/6 to 9/30)', color='red', marker='o')
+
+# Plot predicted mosquito density (9/6 to 9/30)
+plt.plot(date_range[:provided-time_steps], train_predictions_adjusted, label='Predicted Mosquito Density (9/6 to 9/30)', color='green', linestyle='--', marker='x')
+
+# Plot predicted mosquito density (10/1 to 10/7)
+plt.plot(date_range[provided-time_steps:], future_predictions, label='Predicted Mosquito Density (10/1 to 10/7)', color='blue', linestyle='--', marker='x')
+
+# Set labels and title
+plt.title('Mosquito Density Predictions: Optimized LSTM Model (9/6 to 10/7)')
+plt.xlabel('Date')
+plt.ylabel('Mosquito Density')
+plt.xticks(rotation=45)
 plt.legend()
+plt.tight_layout()
 plt.show()
 
-# Predict using the LSTM model
-y_pred_lstm = model_lstm.predict(X_test_lstm)
-mae_lstm = mean_absolute_error(y_test, y_pred_lstm)
-rmse_lstm = np.sqrt(mean_squared_error(y_test, y_pred_lstm))
-r2_lstm = r2_score(y_test, y_pred_lstm)
-
-print(f'LSTM Model - Mean Absolute Error: {mae_lstm}')
-print(f'LSTM Model - Root Mean Squared Error: {rmse_lstm}')
-print(f'LSTM Model - R-squared: {r2_lstm}')
-
-# Plot the actual vs predicted values for LSTM model
-plt.figure(figsize=(10, 6))
-plt.plot(y_test.values, label='Actual', marker='o')
-plt.plot(y_pred_lstm, label='Predicted', marker='x')
-plt.title('Actual vs Predicted Values (LSTM Model)')
-plt.xlabel('Samples')
-plt.ylabel('Precipitation')
-plt.legend()
-plt.show()
+# Step 12: Print future mosquito density predictions (10/1 to 10/7)
+print("Future mosquito density predictions (10/1 to 10/7):")
+for date, prediction in zip(date_range[provided-time_steps:], future_predictions):
+    print(f"{date.strftime('%Y-%m-%d')}: {prediction:.4f}")
