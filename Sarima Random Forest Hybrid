@@ -7,15 +7,18 @@ import statsmodels.api as sm
 
 # Load the weather data (replace with your file path)
 new_weather_data_provided = pd.read_excel('Data.xlsx')
+provided = 26
+prediction = 7
+all=provided + prediction                                          
 
 # Extract mosquito density values for the training period (9/5 to 9/30)
-mosquito_density_train = new_weather_data_provided['mosquito_density'][:26]
+mosquito_density_train = new_weather_data_provided['mosquito_density'][:provided]
 
 # Extract relevant weather features (temperature, precipitation, solar radiation, humidity, windspeed)
-weather_features_train = new_weather_data_provided[['temp', 'precip', 'solarradiation', 'humidity', 'windspeed']][:26]
+weather_features_train = new_weather_data_provided[['temp', 'precip', 'solarradiation', 'humidity', 'windspeed']][:provided]
 
 # Extract weather data for the forecast period (10/1 to 10/7)
-weather_features_forecast = new_weather_data_provided[['temp', 'precip', 'solarradiation', 'humidity', 'windspeed']][26:33]
+weather_features_forecast = new_weather_data_provided[['temp', 'precip', 'solarradiation', 'humidity', 'windspeed']][provided:all]
 
 # Step 1: Fit SARIMA model and calculate residuals
 sarima_model = sm.tsa.statespace.SARIMAX(mosquito_density_train,
@@ -40,7 +43,7 @@ rf_residual_model.fit(weather_features_train, residuals)
 rf_forecast_residuals = rf_residual_model.predict(weather_features_forecast)
 
 # Combine SARIMA forecast for 10/1 to 10/7 with Random Forest residual predictions
-sarima_forecast = sarima_fit.get_forecast(steps=7)
+sarima_forecast = sarima_fit.get_forecast(steps=prediction)
 sarima_forecast_values = sarima_forecast.predicted_mean
 hybrid_forecast = sarima_forecast_values + rf_forecast_residuals
 
@@ -49,12 +52,12 @@ hybrid_predictions_full = pd.concat([pd.Series(sarima_train_forecast_values + rf
                                      pd.Series(hybrid_forecast)], ignore_index=True)
 
 # Step 5: Plot the results
-date_range = pd.date_range(start='2024-09-05', periods=33, freq='D')
+date_range = pd.date_range(start='2024-09-05', periods=all, freq='D')
 
 plt.figure(figsize=(10,6))
 
 # Plot actual mosquito density for the training period (9/5 to 9/30)
-plt.plot(date_range[:26], mosquito_density_train, label='Actual Mosquito Density (9/5 to 9/30)', color='red', marker='o')
+plt.plot(date_range[:provided], mosquito_density_train, label='Actual Mosquito Density (9/5 to 9/30)', color='red', marker='o')
 
 # Plot the hybrid predictions for the full period (9/5 to 10/7)
 plt.plot(date_range, hybrid_predictions_full, label='Hybrid Forecast (9/5 to 10/7)', color='purple', linestyle='-', marker='x')
