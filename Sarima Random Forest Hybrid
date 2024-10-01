@@ -5,11 +5,11 @@ from sklearn.metrics import mean_absolute_error, mean_squared_error
 import matplotlib.pyplot as plt
 import statsmodels.api as sm
 
-# Load the weather data (replace with your file path)
+# Load the weather data from the Excel file (replace 'Data.xlsx' with the actual file path)
 new_weather_data_provided = pd.read_excel('Data.xlsx')
 provided = 26
 prediction = 7
-all=provided + prediction                                          
+all = provided + prediction
 
 # Extract mosquito density values for the training period (9/5 to 9/30)
 mosquito_density_train = new_weather_data_provided['mosquito_density'][:provided]
@@ -35,23 +35,37 @@ sarima_train_forecast_values = sarima_train_forecast.predicted_mean
 # Step 2: Calculate residuals (actual - SARIMA predictions)
 residuals = mosquito_density_train - sarima_train_forecast_values
 
-# Step 3: Train Random Forest on the residuals using weather features
+
+
+# Step 5: Train Random Forest on the residuals using weather features
 rf_residual_model = RandomForestRegressor(n_estimators=500, random_state=42)
 rf_residual_model.fit(weather_features_train, residuals)
 
-# Step 4: Predict residuals using Random Forest for the forecast period (10/1 to 10/7)
+# Step 6: Predict residuals using Random Forest for the forecast period (10/1 to 10/7)
 rf_forecast_residuals = rf_residual_model.predict(weather_features_forecast)
 
 # Combine SARIMA forecast for 10/1 to 10/7 with Random Forest residual predictions
 sarima_forecast = sarima_fit.get_forecast(steps=prediction)
 sarima_forecast_values = sarima_forecast.predicted_mean
 hybrid_forecast = sarima_forecast_values + rf_forecast_residuals
+mean=np.mean(((sarima_train_forecast_values + rf_residual_model.predict(weather_features_train))-mosquito_density_train)/(sarima_train_forecast_values + rf_residual_model.predict(weather_features_train)))
+error=np.std((mosquito_density_train-(sarima_train_forecast_values + rf_residual_model.predict(weather_features_train)))/(sarima_train_forecast_values + rf_residual_model.predict(weather_features_train)))
+
+mae_hybrid = mean_absolute_error(mosquito_density_train, sarima_train_forecast_values + rf_residual_model.predict(weather_features_train))
+rmse_hybrid = np.sqrt(mean_squared_error(mosquito_density_train, sarima_train_forecast_values + rf_residual_model.predict(weather_features_train)))
 
 # Combine hybrid predictions for the full period (9/5 to 9/30 + 10/1 to 10/7)
 hybrid_predictions_full = pd.concat([pd.Series(sarima_train_forecast_values + rf_residual_model.predict(weather_features_train)), 
                                      pd.Series(hybrid_forecast)], ignore_index=True)
 
-# Step 5: Plot the results
+# Step 7: Set the error bars for the forecast period to be proportional to the forecasted values
+# Error bars are now calculated using the rolling standard deviation of residual percentages
+# This applies dynamic error bars based on the recent variability in the residuals
+error_bars = np.abs(mean*hybrid_predictions_full)
+errors_up=(mean+error)*hybrid_predictions_full
+errors_down=(error-mean)*hybrid_predictions_full
+errors=[errors_down,errors_up]
+# Step 8: Plot the results with error bars
 date_range = pd.date_range(start='2024-09-05', periods=all, freq='D')
 
 plt.figure(figsize=(10,6))
@@ -59,8 +73,8 @@ plt.figure(figsize=(10,6))
 # Plot actual mosquito density for the training period (9/5 to 9/30)
 plt.plot(date_range[:provided], mosquito_density_train, label='Actual Mosquito Density (9/5 to 9/30)', color='red', marker='o')
 
-# Plot the hybrid predictions for the full period (9/5 to 10/7)
-plt.plot(date_range, hybrid_predictions_full, label='Hybrid Forecast (9/5 to 10/7)', color='purple', linestyle='-', marker='x')
+# Plot the hybrid predictions for the full period (9/5 to 10/7) with error bars
+plt.errorbar(date_range, hybrid_predictions_full, yerr=errors, label='Hybrid Forecast (9/5 to 10/7)', color='purple', linestyle='-', marker='x', capsize=3)
 
 # Set labels and title
 plt.title('Mosquito Density Predictions: Hybrid SARIMA + Random Forest (9/5 to 10/7)')
@@ -71,9 +85,10 @@ plt.legend()
 plt.tight_layout()
 plt.show()
 
-# Step 6: Calculate accuracy metrics for the hybrid model
-mae_hybrid = mean_absolute_error(mosquito_density_train, sarima_train_forecast_values + rf_residual_model.predict(weather_features_train))
-rmse_hybrid = np.sqrt(mean_squared_error(mosquito_density_train, sarima_train_forecast_values + rf_residual_model.predict(weather_features_train)))
+# Step 9: Calculate accuracy metrics for the hybrid model
+
 
 print(f"Hybrid Model MAE: {mae_hybrid}")
 print(f"Hybrid Model RMSE: {rmse_hybrid}")
+print(f"standard deviation:{error}")
+print(f"mean:{mean}")
