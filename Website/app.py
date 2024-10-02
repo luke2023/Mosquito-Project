@@ -8,7 +8,7 @@ import numpy as np
 from sklearn.ensemble import RandomForestRegressor
 from sklearn.metrics import mean_absolute_error, mean_squared_error
 from flask import Flask, render_template, request, redirect, url_for, flash, send_file
-
+import math
 
 # Initialize the Flask app
 app = Flask(__name__)
@@ -29,7 +29,7 @@ def admin():
             # Load the new data from the uploaded CSV file
             new_data = pd.read_csv(file)
             mosquito_data = new_data
-            #Debugged 
+
             # Optionally save the updated data to a CSV file
             mosquito_data.to_csv('data/mosquito_data.csv', index=False)
 
@@ -58,7 +58,7 @@ def index():
     
     # Fetch prediction for the selected date
     return render_template('index.html',
-                           predictions=prediction,
+                           predictions=round(prediction,2),
                            metrics=metrics,
                            today=today.strftime('%Y-%m-%d'),
                            tomorrow=tomorrow.strftime('%Y-%m-%d'),
@@ -142,10 +142,10 @@ def make_predictions(data):
 
     # Package the metrics
     metrics = {
-        'MAE': mae,
-        'RMSE': rmse,
-        'Mean Error': mean_error,
-        'STD (Percentage)': std_error * 100  # Convert to percentage
+        'MAE': round(mae,2),
+        'RMSE': round(rmse,2),
+        'Mean Error': round(mean_error*100,2),
+        'STD (Percentage)': round(std_error * 100,2)  # Convert to percentage
     }
 
     return hybrid_forecast.tolist(), metrics
@@ -194,7 +194,6 @@ def create_plot(data, predictions):
 
 if __name__ == '__main__':
     app.run(debug=True)
-
 
 
 
