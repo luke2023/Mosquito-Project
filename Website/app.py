@@ -28,8 +28,8 @@ def admin():
         if file:
             # Load the new data from the uploaded CSV file
             new_data = pd.read_csv(file)
-            mosquito_data = pd.concat([mosquito_data, new_data], ignore_index=True)
-
+            mosquito_data = new_data
+            #Debugged 
             # Optionally save the updated data to a CSV file
             mosquito_data.to_csv('data/mosquito_data.csv', index=False)
 
