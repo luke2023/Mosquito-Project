@@ -9,6 +9,7 @@ from sklearn.ensemble import RandomForestRegressor
 from sklearn.metrics import mean_absolute_error, mean_squared_error
 from flask import Flask, render_template, request, redirect, url_for, flash, send_file
 import math
+import shap
 
 # Initialize the Flask app
 app = Flask(__name__)
@@ -41,9 +42,10 @@ def admin():
 @app.route('/', methods=['GET'])
 def index():
     # Get predictions and metrics for the entire dataset
+    global importance_dict
     data = pd.read_csv(DATA_FILE)
     data['date'] = pd.to_datetime(data['date'], errors='coerce')  # Manually parse 'date' after reading
-    predictions, metrics = make_predictions(data)
+    predictions, metrics, importance_dict , shap = make_predictions(data)
     today = datetime.datetime.now().date()
     tomorrow = today + datetime.timedelta(days=1)
 
@@ -55,7 +57,6 @@ def index():
     selected_date_str = request.args.get('selected_date', today.strftime('%Y-%m-%d'))
     # Fetch the prediction
     prediction = make_prediction_for_date(selected_date_str)
-    
     # Fetch prediction for the selected date
     return render_template('index.html',
                            predictions=round(prediction,2),
@@ -64,7 +65,8 @@ def index():
                            tomorrow=tomorrow.strftime('%Y-%m-%d'),
                            past_dates=past_dates,
                            future_dates=future_dates,
-                           selected_date=selected_date_str)
+                           selected_date=selected_date_str,
+                           feature_importances=importance_dict)
 
 # Route to display a plot
 @app.route('/plot.png')
@@ -76,7 +78,7 @@ def plot_png():
         flash('No data available to generate the plot.', 'danger')
         return redirect(url_for('index'))
 
-    predictions, _ = make_predictions(data)
+    predictions,metrics, importance_dict, shap  = make_predictions(data)
     fig = create_plot(data, predictions)
     
     # Save plot to BytesIO and return as PNG
@@ -85,6 +87,33 @@ def plot_png():
     output.seek(0)
     plt.close(fig)
     return send_file(output, mimetype='image/png')
+@app.route('/feature_importances.png')
+def feature_importances_png():
+        # Convert importance_dict back into a DataFrame
+        importance_df = pd.DataFrame(importance_dict)
+        importance_df = importance_df.sort_values(by='Importance', ascending=False)
+
+        # Create the plot
+        fig = plt.figure(figsize=(10, 6))
+        plt.barh(importance_df['Feature'], importance_df['Importance'], color='blue')
+        plt.xlabel('Importance')
+        plt.title('Feature Importances from Random Forest')
+        plt.gca().invert_yaxis()
+        plt.tight_layout()
+
+        # Save plot to BytesIO and return as PNG
+        output = io.BytesIO()
+        fig.savefig(output, format='png')
+        output.seek(0)
+        plt.close(fig)
+        return send_file(output, mimetype='image/png')
+@app.route('/shap_plot.png')
+def shap_plot_png():
+    # Return SHAP plot as PNG for web display
+    data = pd.read_csv(DATA_FILE)
+    shap_output = make_predictions(data)[3]  # Assuming make_predictions returns shap_output as the 4th item
+    return send_file(shap_output, mimetype='image/png')
+
 
 def make_predictions(data):
     global mean_error
@@ -126,7 +155,16 @@ def make_predictions(data):
 
     # Combine SARIMA forecast and RF residuals for hybrid prediction
     hybrid_forecast = sarima_forecast + rf_residuals
+    explainer = shap.TreeExplainer(rf_model)
+    shap_values = explainer.shap_values(weather_features_train)
 
+    # Save SHAP summary plot
+    shap_fig = plt.figure()
+    shap.summary_plot(shap_values, weather_features_train, show=False)
+    shap_output = io.BytesIO()
+    shap_fig.savefig(shap_output, format='png')
+    shap_output.seek(0)
+    plt.close(shap_fig)
     # Save predictions
     predictions_df = pd.DataFrame({
         'date': data['date'],
@@ -139,7 +177,13 @@ def make_predictions(data):
     rmse = np.sqrt(mean_squared_error(mosquito_density_train, sarima_forecast_train + rf_model.predict(weather_features_train)))
     mean_error = np.mean((-mosquito_density_train + (sarima_forecast_train + rf_model.predict(weather_features_train))) / (sarima_forecast_train + rf_model.predict(weather_features_train)))
     std_error = np.std((-mosquito_density_train + (sarima_forecast_train + rf_model.predict(weather_features_train))) / (sarima_forecast_train + rf_model.predict(weather_features_train)))
+    importances = rf_model.feature_importances_
+    features = weather_features_train.columns
+    importance_df = pd.DataFrame({'Feature': features, 'Importance': importances})
+    importance_df = importance_df.sort_values(by='Importance', ascending=False)
 
+    # Convert the DataFrame to a dictionary for passing to the template
+    importance_dict = importance_df.to_dict(orient='records')
     # Package the metrics
     metrics = {
         'MAE': round(mae,2),
@@ -148,7 +192,7 @@ def make_predictions(data):
         'STD (Percentage)': round(std_error * 100,2)  # Convert to percentage
     }
 
-    return hybrid_forecast.tolist(), metrics
+    return hybrid_forecast.tolist(), metrics , importance_dict,shap_output
 
 
 def make_prediction_for_date(selected_date_str):
@@ -194,7 +238,6 @@ def create_plot(data, predictions):
 
 if __name__ == '__main__':
     app.run(debug=True)
-
 
 
 
