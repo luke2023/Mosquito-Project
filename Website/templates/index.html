@@ -3,78 +3,115 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Mosquito Density Prediction</title>
+    <title>Mosquito Density Prediction - TNFSH</title>
     <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css">
 </head>
 <body>
     <div class="container">
-        <h1 class="mt-5">Mosquito Density Prediction</h1>
+        <h1 class="mt-5 text-center">Mosquito Density Prediction - TNFSH (Tainan First Senior High School)</h1>
 
-        <!-- Flash messages for success, warning, or danger alerts -->
-        {% with messages = get_flashed_messages(with_categories=true) %}
-            {% if messages %}
-                <div class="mt-4">
-                    {% for category, message in messages %}
-                        <div class="alert alert-{{ category }}">{{ message }}</div>
-                    {% endfor %}
-                </div>
-            {% endif %}
-        {% endwith %}
+        <!-- Navigation Tabs for Switching Between Prediction and How It Works -->
+        <ul class="nav nav-tabs mt-4" id="myTab" role="tablist">
+            <li class="nav-item">
+                <a class="nav-link active" id="prediction-tab" data-toggle="tab" href="#prediction" role="tab" aria-controls="prediction" aria-selected="true">Prediction</a>
+            </li>
+            <li class="nav-item">
+                <a class="nav-link" id="howItWorks-tab" data-toggle="tab" href="#howItWorks" role="tab" aria-controls="howItWorks" aria-selected="false">How It Works</a>
+            </li>
+        </ul>
 
-        <!-- Form for selecting a date to get prediction -->
-        <form method="get" action="/">
-            <div class="form-group">
-                <label for="selected_date">Select Date:</label>
-                <select class="form-control" id="selected_date" name="selected_date">
-                    <option value="{{ today }}" {% if selected_date == today %}selected{% endif %}>Today ({{ today }})</option>
-                    <option value="{{ tomorrow }}" {% if selected_date == tomorrow %}selected{% endif %}>Tomorrow ({{ tomorrow }})</option>
-                    <optgroup label="Past Dates">
-                        {% for date in past_dates %}
-                            <option value="{{ date }}" {% if selected_date == date %}selected{% endif %}>{{ date }}</option>
-                        {% endfor %}
-                    </optgroup>
-                    <optgroup label="Future Dates">
-                        {% for date in future_dates %}
-                            <option value="{{ date }}" {% if selected_date == date %}selected{% endif %}>{{ date }}</option>
-                        {% endfor %}
-                    </optgroup>
-                </select>
+        <!-- Tab Content -->
+        <div class="tab-content mt-4" id="myTabContent">
+            <!-- Prediction Content -->
+            <div class="tab-pane fade show active" id="prediction" role="tabpanel" aria-labelledby="prediction-tab">
+                <!-- Form for selecting a date to get prediction -->
+                <form method="get" action="/">
+                    <div class="form-group">
+                        <label for="selected_date">Select Date:</label>
+                        <select class="form-control" id="selected_date" name="selected_date">
+                            <option value="{{ today }}" {% if selected_date == today %}selected{% endif %}>Today ({{ today }})</option>
+                            <option value="{{ tomorrow }}" {% if selected_date == tomorrow %}selected{% endif %}>Tomorrow ({{ tomorrow }})</option>
+                            <optgroup label="Past Dates">
+                                {% for date in past_dates %}
+                                    <option value="{{ date }}" {% if selected_date == date %}selected{% endif %}>{{ date }}</option>
+                                {% endfor %}
+                            </optgroup>
+                            <optgroup label="Future Dates">
+                                {% for date in future_dates %}
+                                    <option value="{{ date }}" {% if selected_date == date %}selected{% endif %}>{{ date }}</option>
+                                {% endfor %}
+                            </optgroup>
+                        </select>
+                    </div>
+                    <button type="submit" class="btn btn-success btn-block">Get Prediction</button>
+                </form>
+
+                <hr>
+
+                <!-- Display predictions and metrics if available -->
+                {% if predictions %}
+                    <div class="card mt-4">
+                        <div class="card-body">
+                            <h3 class="card-title">Prediction for {{ selected_date }} (Location: TNFSH, Tainan)</h3>
+                            <p><strong>Predicted Mosquito Density:</strong> {{ predictions }}</p>
+
+                            <h3 class="card-title">Model Performance Metrics</h3>
+                            <ul class="list-group list-group-flush">
+                                <li class="list-group-item"><strong>Mean Absolute Error (MAE):</strong> {{ metrics.MAE }}</li>
+                                <li class="list-group-item"><strong>Root Mean Squared Error (RMSE):</strong> {{ metrics.RMSE }}</li>
+                                <li class="list-group-item"><strong>Mean Error (Percentage):</strong> {{ metrics['Mean Error'] }}%</li>
+                                <li class="list-group-item"><strong>Standard Deviation (Percentage):</strong> {{ metrics['STD (Percentage)'] }}%</li>
+                            </ul>
+
+                            <hr>
+
+                            <h3 class="card-title">Mosquito Density Prediction Plot</h3>
+                            <img src="{{ url_for('plot_png') }}" alt="Mosquito Density Plot" class="img-fluid rounded">
+
+                            <h3 class="card-title">Feature Importances Plot</h3>
+                            <img src="{{ url_for('feature_importances_png') }}" alt="Feature Importances Plot" class="img-fluid rounded">
+                            
+                            <h3>SHAP (SHapley Additive exPlanations) Plot</h3>
+                            <img src="{{ url_for('shap_plot_png') }}" alt="SHAP Plot" class="img-fluid rounded">
+
+                        </div>
+                    </div>
+                {% else %}
+                    <p>No prediction data available for the selected date.</p>
+                {% endif %}
             </div>
-            <button type="submit" class="btn btn-primary">Get Prediction</button>
-        </form>
 
-        <hr>
+            <!-- How It Works Content -->
+            <div class="tab-pane fade" id="howItWorks" role="tabpanel" aria-labelledby="howItWorks-tab">
+                <div class="card mt-4">
+                    <div class="card-body">
+                        <h2 class="card-title">About Mosquito Density Prediction</h2>
+                        <p>This system predicts the density of mosquitoes in a specific location: <strong>Tainan First Senior High School (TNFSH)</strong> in Tainan, Taiwan. The prediction is based on a combination of data about previous mosquito counts and local weather conditions.</p>
 
-        <!-- Display predictions and metrics if available -->
-        {% if predictions %}
-            <h3>Prediction for {{ selected_date }}</h3>
-            <p><strong>Predicted Mosquito Density:</strong> {{ predictions }}</p>
+                        <h2 class="card-title">How Does It Work?</h2>
+                        <p>We use a <strong>hybrid model</strong> that combines two different techniques to make accurate predictions:</p>
+                        <ul>
+                            <li><strong>SARIMA Model:</strong> A statistical model that captures both seasonal and non-seasonal patterns in mosquito populations. It uses data from the past to predict trends and seasonality (for example, the weekly cycles of mosquito activity).</li>
+                            <li><strong>Random Forest Model:</strong> A machine learning model that helps correct the predictions by using real-time weather data, such as temperature, humidity, and wind speed. This model helps adjust for unexpected environmental conditions that affect mosquito populations.</li>
+                        </ul>
 
-            <h3>Model Performance Metrics</h3>
-            <ul>
-                <li><strong>Mean Absolute Error (MAE):</strong> {{ metrics.MAE }}</li>
-                <li><strong>Root Mean Squared Error (RMSE):</strong> {{ metrics.RMSE }}</li>
-                <li><strong>Mean Error (Percentage):</strong> {{ metrics['Mean Error'] }}%</li>
-                <li><strong>Standard Deviation (Percentage):</strong> {{ metrics['STD (Percentage)'] }}%</li>
-            </ul>
+                        <h2 class="card-title">Why Tainan First Senior High School (TNFSH)?</h2>
+                        <p>This system was built specifically for monitoring mosquitoes around TNFSH in Tainan because of the high student population and its impact on mosquito activity. By predicting mosquito density, we can help reduce mosquito-borne diseases and take preventative measures.</p>
 
-            <hr>
-
-            <h3>Mosquito Density Prediction Plot</h3>
-            <img src="{{ url_for('plot_png') }}" alt="Mosquito Density Plot" class="img-fluid">
-
-        {% else %}
-            <p>No prediction data available for the selected date.</p>
-        {% endif %}
+                        <h2 class="card-title">How Can You Use It?</h2>
+                        <p>Select a date from the main page to get the predicted mosquito density for that day. The system will also show you how accurate the model has been in the past, along with the important factors affecting the predictions.</p>
+                    </div>
+                </div>
+            </div>
+        </div>
     </div>
 
     <!-- Bootstrap JS and dependencies -->
     <script src="https://code.jquery.com/jquery-3.5.1.slim.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@popperjs/core@2.9.2/dist/umd/popper.min.js"></script>
-    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.5.2/js/bootstrap.min.js"></script>
+    <script src="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/js/bootstrap.min.js"></script>
 </body>
 </html>
-
 
 
 
