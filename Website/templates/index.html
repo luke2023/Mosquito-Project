@@ -20,7 +20,7 @@
             </li>
         </ul>
 
-        <!-- Tab Content -->
+    <!-- Tab Content -->
         <div class="tab-content mt-4" id="myTabContent">
             <!-- Prediction Content -->
             <div class="tab-pane fade show active" id="prediction" role="tabpanel" aria-labelledby="prediction-tab">
@@ -47,6 +47,16 @@
                 </form>
 
                 <hr>
+
+                <!-- Mosquito Density Prediction Gauge -->
+                <div class="text-center mt-4">
+                    <h3>TNFSH/TAINAN,TAIWAN</h3>
+                    <p>Predicted Mosquito Density Index</p>
+                    <img src="{{ url_for('mosquito_density_gauge') }}" alt="Mosquito Density Index" class="img-fluid rounded">
+                </div>
+                
+                <hr>
+
 
                 <!-- Display predictions and metrics if available -->
                 {% if predictions %}
@@ -95,6 +105,18 @@
                             <li><strong>Random Forest Model:</strong> A machine learning model that helps correct the predictions by using real-time weather data, such as temperature, humidity, and wind speed. This model helps adjust for unexpected environmental conditions that affect mosquito populations.</li>
                         </ul>
 
+                        <h2 class="card-title">Random Forest Schematic</h2>
+                        <p>The Random Forest model consists of multiple decision trees that work together to make a prediction. Here's a simplified schematic of how it works:</p>
+                        <img src="{{ url_for('random_forest_schematic') }}" alt="Random Forest Schematic" class="img-fluid rounded">
+                        <p>The input features, such as temperature, humidity, and wind speed, are passed through multiple decision trees. Each tree makes a prediction, and the final forecast is the result of combining these individual predictions.</p>
+                        <h3 class="card-title">SHAP (SHapley Additive exPlanations) Plot</h3>
+                        <p>The SHAP plot explains the contribution of each feature to the prediction. Each point represents the impact of a feature's value on the model's output (mosquito density). Blue dots indicate lower feature values, while red dots represent higher feature values. Points further from zero have a greater impact on the model's predictions.</p>
+                        <img src="{{ url_for('shap_plot_png') }}" alt="SHAP Plot" class="img-fluid rounded">
+
+                        <h3 class="card-title">Feature Importances Plot</h3>
+                        <p>The feature importance plot shows which features have the greatest influence on the model’s predictions. Features with higher importance, like temperature and precipitation, have a stronger impact on the predicted mosquito density, while others like solar radiation play a lesser role.</p>
+                        <img src="{{ url_for('feature_importances_png') }}" alt="Feature Importances Plot" class="img-fluid rounded">
+
                         <h2 class="card-title">Why Tainan First Senior High School (TNFSH)?</h2>
                         <p>This system was built specifically for monitoring mosquitoes around TNFSH in Tainan because of the high student population and its impact on mosquito activity. By predicting mosquito density, we can help reduce mosquito-borne diseases and take preventative measures.</p>
 
@@ -112,7 +134,6 @@
     <script src="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/js/bootstrap.min.js"></script>
 </body>
 </html>
-
 
 
 
