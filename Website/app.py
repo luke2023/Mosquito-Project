@@ -1,5 +1,6 @@
 import statsmodels.api as sm
 import matplotlib.pyplot as plt
+import matplotlib.patches as mpatches
 import io
 import datetime
 import os
@@ -10,7 +11,9 @@ from sklearn.metrics import mean_absolute_error, mean_squared_error
 from flask import Flask, render_template, request, redirect, url_for, flash, send_file
 import math
 import shap
-
+from matplotlib import patches
+from matplotlib.patches import Circle
+from matplotlib.colors import LinearSegmentedColormap
 # Initialize the Flask app
 app = Flask(__name__)
 app.secret_key = 'your_secret_key'
@@ -43,6 +46,8 @@ def admin():
 def index():
     # Get predictions and metrics for the entire dataset
     global importance_dict
+    global prediction__
+    global selected_date_str
     data = pd.read_csv(DATA_FILE)
     data['date'] = pd.to_datetime(data['date'], errors='coerce')  # Manually parse 'date' after reading
     predictions, metrics, importance_dict , shap = make_predictions(data)
@@ -56,10 +61,10 @@ def index():
     # Selected date
     selected_date_str = request.args.get('selected_date', today.strftime('%Y-%m-%d'))
     # Fetch the prediction
-    prediction = make_prediction_for_date(selected_date_str)
+    prediction__ = make_prediction_for_date(selected_date_str)
     # Fetch prediction for the selected date
     return render_template('index.html',
-                           predictions=round(prediction,2),
+                           predictions=round(prediction__,2),
                            metrics=metrics,
                            today=today.strftime('%Y-%m-%d'),
                            tomorrow=tomorrow.strftime('%Y-%m-%d'),
@@ -114,10 +119,148 @@ def shap_plot_png():
     shap_output = make_predictions(data)[3]  # Assuming make_predictions returns shap_output as the 4th item
     return send_file(shap_output, mimetype='image/png')
 
+@app.route('/mosquito_density_gauge')
+def mosquito_density_gauge():
+    # Example predicted mosquito density value (you can pass it dynamically from your model)
+    predicted_value = round(prediction__,1)
+    colors = [(0, "green"), (0.5, "yellow"), (1, "purple")]
+    cmap = LinearSegmentedColormap.from_list("green_purple", colors)
+
+    # Set up the figure and axis
+    if predicted_value <= 0.5:
+        color = "green"
+        label = "Low"
+        suggestion = "Mosquito activity is low. No extra precautions needed."
+    elif 0.5 < predicted_value <= 1:
+        color = "yellow"
+        label = "Moderate"
+        suggestion = "Consider using insect repellent if spending time outdoors."
+    elif 1 < predicted_value <= 1.5:
+        color = "orange"
+        label = "High"
+        suggestion = "Advised to wear long sleeves and pants. Use insect repellent."
+    else:
+        color = "purple"
+        label = "Very High"
+        suggestion = "Recommended to avoid outdoor activities. Stay Alert."
+    # Set up the figure and axis
+    fig, ax = plt.subplots(figsize=(7, 7))
+    ### 1. Display the Date ###
+    ax.text(1, 2.1, selected_date_str, fontsize=18, ha='center', va='center', color='black')
+    ### 1. Horizontal Color Bar ###
+    gradient = np.linspace(0, 1, 256).reshape(1, -1)
+    ax.imshow(gradient, aspect='auto', cmap=cmap, extent=[0, 2, 1.7, 1.9])
+
+    # Add labels at both ends of the bar
+    ax.text(0, 1.6, "0", ha='center', va='center', fontsize=12, color='black')
+    ax.text(2, 1.6, "2", ha='center', va='center', fontsize=12, color='black')
+
+    # Add a pointer to the predicted mosquito density on the bar
+    ax.plot([predicted_value], [1.9], marker="v", markersize=20, color="black")
+
+    ### 2. Circular Gauge ###
+    # Create the outer circle to represent the mosquito density index
+    outer_circle = Circle((1, 0.9), 0.5, color=color, fill=False, lw=10)
+    ax.add_patch(outer_circle)
+
+    # Add the mosquito density value in the center of the circle
+    ax.text(1, 0.95, f"{predicted_value:.1f}", fontsize=50, ha='center', va='center', color='black', fontweight='bold')
+
+    # Add the "Mosquito Density Index" label above the value
+    ax.text(1, 1.15, "Mosquito Density Index", fontsize=12, ha='center', va='center', color='black')
+
+    # Add the descriptive label (Low, Moderate, High, etc.) below the value
+    ax.text(1, 0.65, label, fontsize=18, ha='center', va='center', color='black')
+
+    ## 3. Add Suggestions ###
+    # Add the suggestion text based on the mosquito density value
+    ax.text(1, 0.15, suggestion, ha='center', va='center', fontsize=12, color='black', wrap=True)
+
+    # Set axis limits and remove ticks/labels
+    ax.set_xlim(0, 2)
+    ax.set_ylim(0, 2)
+    ax.axis('off')
+
+    # Save the figure to a BytesIO object to return as an image
+    output = io.BytesIO()
+    fig.savefig(output, format='png', bbox_inches='tight')
+    output.seek(0)
+    plt.close(fig)
+
+    return send_file(output, mimetype='image/png')
+
+@app.route('/random_forest_schematic.png')
+def random_forest_schematic():
+    fig, ax = plt.subplots(figsize=(10, 3))
+
+    # Start with input at the top
+    ax.text(0.5, 0.9, 'Input Features\n(Temperature, Humidity, etc.)', 
+            bbox=dict(facecolor='lightblue', edgecolor='black'), ha='center', va='center')
+
+    # Define positions for the decision trees (placing each tree next to the other horizontally)
+    tree_positions = [(0.2, 0.7), (0.4, 0.7), (0.6, 0.7), (0.8, 0.7)]
+    
+    for pos_x, pos_y in tree_positions:
+        draw_tree(ax, pos_x, pos_y)
+
+    # Draw the prediction at the bottom
+    ax.text(0.5, 0.2, 'Final Prediction\n(Mosquito Density)', 
+            bbox=dict(facecolor='lightyellow', edgecolor='black'), ha='center', va='center')
+
+    # Turn off axis for cleaner appearance
+    ax.axis('off')
+
+    # Save schematic to a file
+    output = io.BytesIO()
+    fig.savefig(output, format='png')
+    output.seek(0)
+    plt.close(fig)
+
+    return send_file(output, mimetype='image/png')
+
+def draw_tree(ax, pos_x, pos_y):
+    """Draws a simple decision tree structure with three levels"""
+    # Draw the root node
+    root = patches.Circle((pos_x, pos_y), 0.03, facecolor='green', edgecolor='black')
+    ax.add_patch(root)
+
+    # First level branches
+    ax.annotate('', xy=(pos_x - 0.05, pos_y - 0.15), xytext=(pos_x, pos_y),
+                arrowprops=dict(facecolor='black', shrink=0.05))
+    ax.annotate('', xy=(pos_x + 0.05, pos_y - 0.15), xytext=(pos_x, pos_y),
+                arrowprops=dict(facecolor='black', shrink=0.05))
+
+    # Second level nodes
+    left = patches.Circle((pos_x - 0.05, pos_y - 0.15), 0.03, facecolor='blue', edgecolor='black')
+    right = patches.Circle((pos_x + 0.05, pos_y - 0.15), 0.03, facecolor='blue', edgecolor='black')
+    ax.add_patch(left)
+    ax.add_patch(right)
+
+    # Second level branches
+    ax.annotate('', xy=(pos_x - 0.1, pos_y - 0.25), xytext=(pos_x - 0.05, pos_y - 0.1),
+                arrowprops=dict(facecolor='black', shrink=0.05))
+    ax.annotate('', xy=(pos_x, pos_y - 0.25), xytext=(pos_x - 0.05, pos_y - 0.1),
+                arrowprops=dict(facecolor='black', shrink=0.05))
+    ax.annotate('', xy=(pos_x, pos_y - 0.25), xytext=(pos_x + 0.05, pos_y - 0.1),
+                arrowprops=dict(facecolor='black', shrink=0.05))
+    ax.annotate('', xy=(pos_x + 0.1, pos_y - 0.25), xytext=(pos_x + 0.05, pos_y - 0.1),
+                arrowprops=dict(facecolor='black', shrink=0.05))
+
+    # Third level nodes
+    lower_left = patches.Circle((pos_x - 0.1, pos_y - 0.25), 0.03, facecolor='orange', edgecolor='black')
+    lower_middle_left = patches.Circle((pos_x, pos_y - 0.25), 0.03, facecolor='orange', edgecolor='black')
+    lower_middle_right = patches.Circle((pos_x, pos_y - 0.25), 0.03, facecolor='orange', edgecolor='black')
+    lower_right = patches.Circle((pos_x + 0.1, pos_y - 0.25), 0.03, facecolor='orange', edgecolor='black')
+    ax.add_patch(lower_left)
+    ax.add_patch(lower_middle_left)
+    ax.add_patch(lower_middle_right)
+    ax.add_patch(lower_right)
+
 
 def make_predictions(data):
     global mean_error
     global std_error
+    
     """Generate predictions using SARIMA and Random Forest models."""
     train_data = data[data['mosquito_density'].notna()]
     predict_data = data[data['mosquito_density'].isna()]
