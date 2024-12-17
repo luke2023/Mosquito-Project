@@ -1,0 +1,158 @@
+#include <SPI.h>
+#include <SD.h>
+
+#define SD_CS_PIN 10            // Chip select pin for SD card module
+#define analogPin A0            // Infrared sensor pin
+
+const unsigned long sampleIntervalMillis = 10; // Sampling every 10ms (~100Hz)
+const unsigned long dayDurationMillis = 86400000; // 24 hours in milliseconds
+const float dropPercentage = 0.02;   // Define "sudden drop" threshold (2%)
+const unsigned long detectionCooldown = 1000; // Cooldown after mosquito detection in ms
+
+File dataFile;
+File countFile;
+
+unsigned long previousMillis = 0;       // Tracks the last sample time
+unsigned long dayStartMillis = 0;       // Tracks start of the current day
+unsigned long lastDetectionMillis = 0;  // Tracks the last mosquito detection time
+
+int lastSensorValue = 0;                // Stores the previous sensor reading
+int mosquitoCount = 0;                  // Counter for mosquitoes
+int dayCounter = 0;                     // Day counter for file naming
+
+char dataFilename[15];                  // Stores sensor data file name
+const char countFilename[] = "COUNT.CSV"; // Fixed filename for daily counts
+
+void createDataFile() {
+  // Close the existing file if open
+  if (dataFile) dataFile.close();
+
+  // Generate a new filename for sensor data
+  sprintf(dataFilename, "DATA_%03d.CSV", dayCounter);
+
+  // Open the new file
+  dataFile = SD.open(dataFilename, FILE_WRITE);
+  if (!dataFile) {
+    Serial.print("Error creating data file: ");
+    Serial.println(dataFilename);
+    while (1);
+  }
+
+  dataFile.println("timestamp(HH:MM:SS.mmm),sensor_value,event");
+  dataFile.flush();
+
+  Serial.print("New data file created: ");
+  Serial.println(dataFilename);
+}
+
+void setupDailyCountFile() {
+  // Open DAILY_COUNT.CSV in append mode
+  countFile = SD.open(countFilename, FILE_WRITE);
+  if (!countFile) {
+    Serial.print("Error creating daily count file: ");
+    Serial.println(countFilename);
+    while (1);
+  }
+
+  // Write the header if the file is empty
+  if (countFile.size() == 0) {
+    countFile.println("Day,Total Mosquito Count");
+  }
+  countFile.flush();
+}
+
+void logDailyCount() {
+  // Append today's mosquito count to the daily count file
+  countFile.print("Day ");
+  countFile.print(dayCounter);
+  countFile.print(",");
+  countFile.println(mosquitoCount);
+  countFile.flush();
+
+  Serial.print("Daily count logged: ");
+  Serial.print("Day ");
+  Serial.print(dayCounter);
+  Serial.print(" = ");
+  Serial.println(mosquitoCount);
+}
+
+void setup() {
+  Serial.begin(115200);
+
+  // Initialize SD card
+  Serial.print("Initializing SD card...");
+  if (!SD.begin(SD_CS_PIN)) {
+    Serial.println("Initialization failed!");
+    while (1);
+  }
+  Serial.println("Initialization done.");
+
+  // Setup daily count file and first day's data file
+  setupDailyCountFile();
+  createDataFile();
+  dayStartMillis = millis();
+}
+
+void loop() {
+  unsigned long currentMillis = millis();
+
+  // Check if 24 hours have passed
+  if (currentMillis - dayStartMillis >= dayDurationMillis) {
+    logDailyCount();       // Save the daily mosquito count
+    dayCounter++;          // Increment day counter
+    createDataFile();      // Create a new data file
+    dayStartMillis = currentMillis;  // Reset day start time
+    mosquitoCount = 0;     // Reset daily mosquito count
+  }
+
+  // Sample data at intervals
+  if (currentMillis - previousMillis >= sampleIntervalMillis) {
+    previousMillis = currentMillis;
+
+    // Read sensor value
+    int sensorValue = analogRead(analogPin);
+
+    // Calculate time components (HH:MM:SS.mmm)
+    unsigned long totalSeconds = currentMillis / 1000UL;
+    unsigned long millisecondsPart = currentMillis % 1000UL;
+    unsigned long hours = totalSeconds / 3600UL;
+    unsigned long minutes = (totalSeconds % 3600UL) / 60UL;
+    unsigned long seconds = totalSeconds % 60UL;
+
+    // Log time and sensor value to data file
+    if (hours < 10) dataFile.print('0');
+    dataFile.print(hours);
+    dataFile.print(':');
+    if (minutes < 10) dataFile.print('0');
+    dataFile.print(minutes);
+    dataFile.print(':');
+    if (seconds < 10) dataFile.print('0');
+    dataFile.print(seconds);
+    dataFile.print('.');
+    if (millisecondsPart < 100) dataFile.print('0');
+    if (millisecondsPart < 10) dataFile.print('0');
+    dataFile.print(millisecondsPart);
+    
+    dataFile.print(",");
+    dataFile.print(sensorValue);
+
+    // Detect sudden drops (>2%) with cooldown
+    if (lastSensorValue > 0 && 
+        (lastSensorValue - sensorValue) > lastSensorValue * dropPercentage && 
+        (currentMillis - lastDetectionMillis > detectionCooldown)) {
+      
+      mosquitoCount++;
+      lastDetectionMillis = currentMillis; // Update last detection time
+      dataFile.print(",Mosquito Detected");
+      Serial.print("Mosquito Detected! Count: ");
+      Serial.println(mosquitoCount);
+    }
+
+    // Finalize line in the CSV
+    dataFile.println();
+    dataFile.flush();
+
+    // Update last sensor value
+    lastSensorValue = sensorValue;
+  }
+}
